@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // mockCompletionProvider implements CompletionProvider for testing.
@@ -484,6 +485,7 @@ func TestCompletionMenuUsesConfiguredVisibleItemCount(t *testing.T) {
 	if strings.Contains(view, "item07") {
 		t.Fatalf("expected configured completion menu to stop before the seventh item, got:\n%s", view)
 	}
+	t.Logf("rendered completion menu with CompletionMaxVisible=6:\n%s", ansi.Strip(view))
 }
 
 func TestSingleCompletion(t *testing.T) {

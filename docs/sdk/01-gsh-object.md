@@ -93,6 +93,7 @@ Controls tab-completion menu behavior.
 | -------------------------------- | --------------------- | -------------------------------------------------------- |
 | `gsh.completion.maxVisibleItems` | `number` (read/write) | Number of completion suggestions shown at once           |
 
+The value must be an integer of at least `1`.
 The default is `10`.
 Set this in `~/.gsh/repl.gsh` to show more or fewer completion options before the menu scrolls.
 
