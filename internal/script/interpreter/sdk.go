@@ -148,11 +148,12 @@ func (em *EventManager) RemoveAll(eventName string) int {
 
 // SDKConfig manages runtime configuration for the SDK
 type SDKConfig struct {
-	mu               sync.RWMutex
-	logger           *zap.Logger
-	atomicLevel      zap.AtomicLevel
-	logFile          string // read-only, set at initialization
-	lastAgentRequest Value
+	mu                        sync.RWMutex
+	logger                    *zap.Logger
+	atomicLevel               zap.AtomicLevel
+	logFile                   string // read-only, set at initialization
+	lastAgentRequest          Value
+	completionMaxVisibleItems int
 	// Models holds the model tier definitions (available in both REPL and script mode)
 	models *Models
 	// REPL context (nil in script mode)
@@ -160,6 +161,8 @@ type SDKConfig struct {
 	// History provider for gsh.history access (nil in script mode)
 	historyProvider HistoryProvider
 }
+
+const DefaultCompletionMaxVisibleItems = 10
 
 // REPLContext holds REPL-specific state that's available in the SDK
 type REPLContext struct {
@@ -210,11 +213,12 @@ func NewSDKConfig(logger *zap.Logger, atomicLevel zap.AtomicLevel) *SDKConfig {
 	// It would need to be passed separately if needed in the future
 
 	return &SDKConfig{
-		logger:           logger,
-		atomicLevel:      atomicLevel,
-		logFile:          logFile,
-		lastAgentRequest: &NullValue{},
-		models:           &Models{}, // Initialize empty models (available in both REPL and script mode)
+		logger:                    logger,
+		atomicLevel:               atomicLevel,
+		logFile:                   logFile,
+		lastAgentRequest:          &NullValue{},
+		completionMaxVisibleItems: DefaultCompletionMaxVisibleItems,
+		models:                    &Models{}, // Initialize empty models (available in both REPL and script mode)
 	}
 }
 
@@ -276,6 +280,28 @@ func (sc *SDKConfig) GetLogFile() string {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
 	return sc.logFile
+}
+
+// GetCompletionMaxVisibleItems returns the configured completion menu size.
+func (sc *SDKConfig) GetCompletionMaxVisibleItems() int {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+	if sc.completionMaxVisibleItems <= 0 {
+		return DefaultCompletionMaxVisibleItems
+	}
+	return sc.completionMaxVisibleItems
+}
+
+// SetCompletionMaxVisibleItems sets the completion menu size.
+func (sc *SDKConfig) SetCompletionMaxVisibleItems(value int) error {
+	if value < 1 {
+		return fmt.Errorf("completion max visible items must be at least 1")
+	}
+
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.completionMaxVisibleItems = value
+	return nil
 }
 
 // GetLastAgentRequest returns the last agent request data

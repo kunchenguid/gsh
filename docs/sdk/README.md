@@ -10,6 +10,7 @@ The `gsh` object is the primary API for configuring and extending gsh, available
 | `gsh.version`                | Current gsh version                          | REPL + Script |
 | `gsh.terminal`               | Terminal dimensions and TTY info             | REPL + Script |
 | `gsh.logging`                | Log level and file configuration             | REPL + Script |
+| `gsh.completion`             | Tab-completion menu configuration            | REPL + Script |
 | `gsh.models`                 | Model tier system (lite, workhorse, premium) | REPL + Script |
 | `gsh.tools`                  | Built-in tools for agents                    | REPL + Script |
 | `gsh.prompt`                 | Set the shell prompt                         | REPL only     |
@@ -35,13 +36,16 @@ gsh.models.workhorse = myModel
 
 # Set logging level
 gsh.logging.level = "info"
+
+# Show more tab-completion options at once
+gsh.completion.maxVisibleItems = 20
 ```
 
 You can study the default configuration in `cmd/gsh/defaults/` as a reference.
 
 ## Chapters
 
-1. **[Core Properties](01-gsh-object.md)** - Version, terminal, logging, prompt, lastCommand
+1. **[Core Properties](01-gsh-object.md)** - Version, terminal, logging, completion, prompt, lastCommand
 2. **[Models](02-models.md)** - Model tiers and model declaration syntax
 3. **[Tools](03-tools.md)** - Built-in tools for agents (exec, grep, view_file, edit_file)
 4. **[Agents](04-agents.md)** - Defining and using custom agents

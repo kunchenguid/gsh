@@ -1,6 +1,7 @@
 package input
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -438,6 +439,50 @@ func TestCompletion(t *testing.T) {
 
 	if m.Value() != "file2.txt" {
 		t.Errorf("expected 'file2.txt', got '%s'", m.Value())
+	}
+}
+
+func TestCompletionMenuShowsMoreThanFourItemsByDefault(t *testing.T) {
+	provider := &mockCompletionProvider{
+		completions: []string{"item01", "item02", "item03", "item04", "item05", "item06"},
+	}
+
+	m := New(Config{
+		Prompt:             "> ",
+		CompletionProvider: provider,
+	})
+	m.SetValue("item")
+
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = newModel.(Model)
+
+	view := m.View()
+	if !strings.Contains(view, "item05") {
+		t.Fatalf("expected default completion menu to include the fifth item, got:\n%s", view)
+	}
+}
+
+func TestCompletionMenuUsesConfiguredVisibleItemCount(t *testing.T) {
+	provider := &mockCompletionProvider{
+		completions: []string{"item01", "item02", "item03", "item04", "item05", "item06", "item07", "item08"},
+	}
+
+	m := New(Config{
+		Prompt:               "> ",
+		CompletionProvider:   provider,
+		CompletionMaxVisible: 6,
+	})
+	m.SetValue("item")
+
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = newModel.(Model)
+
+	view := m.View()
+	if !strings.Contains(view, "item06") {
+		t.Fatalf("expected configured completion menu to include the sixth item, got:\n%s", view)
+	}
+	if strings.Contains(view, "item07") {
+		t.Fatalf("expected configured completion menu to stop before the seventh item, got:\n%s", view)
 	}
 }
 

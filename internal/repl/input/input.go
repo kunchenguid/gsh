@@ -113,6 +113,10 @@ type Config struct {
 	// CompletionProvider provides tab completion suggestions.
 	CompletionProvider CompletionProvider
 
+	// CompletionMaxVisible is the maximum number of completion suggestions shown at once.
+	// If zero or negative, a default is used.
+	CompletionMaxVisible int
+
 	// PredictionState manages command predictions.
 	PredictionState *PredictionState
 
@@ -167,6 +171,7 @@ func New(cfg Config) Model {
 	renderer := NewRenderer(*renderConfig, NewHighlighter(cfg.AliasExistsFunc, cfg.GetEnvFunc, cfg.GetWorkingDirFunc))
 	renderer.SetWidth(width)
 	renderer.SetContinuationPrompt(continuationPrompt)
+	renderer.SetCompletionMaxVisible(cfg.CompletionMaxVisible)
 
 	return Model{
 		buffer:             NewBuffer(),
