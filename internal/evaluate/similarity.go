@@ -197,7 +197,7 @@ func nodeLabel(n syntax.Node) string {
 		return "nil"
 	}
 	t := reflect.TypeOf(n)
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	label := t.Name()
@@ -220,7 +220,7 @@ func getChildren(n syntax.Node) []syntax.Node {
 	var children []syntax.Node
 	v := reflect.ValueOf(n)
 	// If it's a pointer, get the element.
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	// Only process structs.
@@ -249,7 +249,7 @@ func getChildren(n syntax.Node) []syntax.Node {
 			}
 		}
 		// Also check for pointer fields that may hold a syntax.Node.
-		if field.Kind() == reflect.Ptr && !field.IsNil() {
+		if field.Kind() == reflect.Pointer && !field.IsNil() {
 			if child, ok := field.Interface().(syntax.Node); ok && child != nil {
 				children = append(children, child)
 			}
