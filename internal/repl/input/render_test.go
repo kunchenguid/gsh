@@ -483,6 +483,14 @@ func TestCalculateVisibleWindow(t *testing.T) {
 			wantStart:  6,
 			wantEnd:    10,
 		},
+		{
+			name:       "single visible item follows selection",
+			selected:   1,
+			total:      10,
+			maxVisible: 1,
+			wantStart:  1,
+			wantEnd:    2,
+		},
 	}
 
 	for _, tt := range tests {

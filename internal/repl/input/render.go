@@ -801,32 +801,27 @@ func CalculateCursorPosition(prompt string, text string, cursorPos int) int {
 
 // calculateVisibleWindow determines the start and end indices for a scrolling window.
 func calculateVisibleWindow(selected, total, maxVisible int) (start, end int) {
+	if total <= 0 || maxVisible <= 0 {
+		return 0, 0
+	}
+	if selected < 0 {
+		selected = 0
+	}
+	if selected >= total {
+		selected = total - 1
+	}
 	if total <= maxVisible {
 		return 0, total
 	}
 
-	// Try to keep selection roughly in the middle
-	if selected < 2 {
-		start = 0
-	} else if selected >= total-2 {
-		start = total - maxVisible
-	} else {
-		start = selected - 1
-	}
-
-	end = start + maxVisible
-
-	// Ensure bounds
+	start = selected - (maxVisible-1)/2
 	if start < 0 {
 		start = 0
 	}
-	if end > total {
-		end = total
-		start = end - maxVisible
-		if start < 0 {
-			start = 0
-		}
+	if start+maxVisible > total {
+		start = total - maxVisible
 	}
+	end = start + maxVisible
 
 	return start, end
 }
