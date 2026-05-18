@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/kunchenguid/gsh/compare/v1.10.3...v1.11.0) (2026-05-18)
+
+
+### Features
+
+* **repl:** add configurable completion menu size ([#211](https://github.com/kunchenguid/gsh/issues/211)) ([0521449](https://github.com/kunchenguid/gsh/commit/052144977e2964ef61ae07b66aa4126fd69be882))
+
 ## [1.10.3](https://github.com/kunchenguid/gsh/compare/v1.10.2...v1.10.3) (2026-04-04)
 
 
