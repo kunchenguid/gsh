@@ -318,17 +318,18 @@ func (r *REPL) Run(ctx context.Context) error {
 			termWidth = 80
 		}
 		inputModel := input.New(input.Config{
-			Prompt:             prompt,
-			ContinuationPrompt: r.getContinuationPrompt(),
-			HistoryValues:      historyValues,
-			HistorySearchFunc:  r.createHistorySearchFunc(),
-			CompletionProvider: r.completionProvider,
-			AliasExistsFunc:    r.executor.AliasOrFunctionExists,
-			GetEnvFunc:         r.executor.GetEnv,
-			GetWorkingDirFunc:  r.executor.GetPwd,
-			PredictionState:    predictionState,
-			Width:              termWidth,
-			Logger:             r.logger,
+			Prompt:               prompt,
+			ContinuationPrompt:   r.getContinuationPrompt(),
+			HistoryValues:        historyValues,
+			HistorySearchFunc:    r.createHistorySearchFunc(),
+			CompletionProvider:   r.completionProvider,
+			CompletionMaxVisible: r.executor.Interpreter().SDKConfig().GetCompletionMaxVisibleItems(),
+			AliasExistsFunc:      r.executor.AliasOrFunctionExists,
+			GetEnvFunc:           r.executor.GetEnv,
+			GetWorkingDirFunc:    r.executor.GetPwd,
+			PredictionState:      predictionState,
+			Width:                termWidth,
+			Logger:               r.logger,
 		})
 
 		// Run the input loop

@@ -133,6 +133,37 @@ gsh.models.lite = testLite
 	}
 }
 
+func TestGshCompletionMaxVisibleItems(t *testing.T) {
+	interp := New(&Options{})
+	defer interp.Close()
+
+	result, err := interp.EvalString(`gsh.completion.maxVisibleItems`, nil)
+	if err != nil {
+		t.Fatalf("unexpected error reading completion setting: %v", err)
+	}
+	if numVal, ok := result.FinalResult.(*NumberValue); !ok || numVal.Value <= 4 {
+		t.Fatalf("expected default completion max visible items to be greater than 4, got %v", result.FinalResult)
+	}
+
+	_, err = interp.EvalString(`gsh.completion.maxVisibleItems = 12`, nil)
+	if err != nil {
+		t.Fatalf("unexpected error setting completion max visible items: %v", err)
+	}
+	if got := interp.SDKConfig().GetCompletionMaxVisibleItems(); got != 12 {
+		t.Fatalf("expected SDK completion max visible items 12, got %d", got)
+	}
+
+	_, err = interp.EvalString(`gsh.completion.maxVisibleItems = 0`, nil)
+	if err == nil {
+		t.Fatal("expected error when setting completion max visible items below 1")
+	}
+
+	_, err = interp.EvalString(`gsh.completion.maxVisibleItems = "many"`, nil)
+	if err == nil {
+		t.Fatal("expected error when setting completion max visible items to a non-number")
+	}
+}
+
 // TestGshReplLastCommand tests that gsh.lastCommand is accessible
 func TestGshReplLastCommand(t *testing.T) {
 	interp := New(&Options{})

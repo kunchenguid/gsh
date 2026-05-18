@@ -20,6 +20,30 @@ func (i *Interpreter) registerGshSDK() {
 	// Create gsh.logging object (read/write)
 	loggingObj := &LoggingObjectValue{interp: i}
 
+	// Create gsh.completion object (read-only object, writable settings)
+	completionObj := &ObjectValue{
+		Properties: map[string]*PropertyDescriptor{
+			"maxVisibleItems": {
+				Getter: func() Value {
+					return &NumberValue{Value: float64(i.sdkConfig.GetCompletionMaxVisibleItems())}
+				},
+				Setter: func(value Value) error {
+					num, ok := value.(*NumberValue)
+					if !ok {
+						return fmt.Errorf("gsh.completion.maxVisibleItems must be a number, got %s", value.Type())
+					}
+					if math.Trunc(num.Value) != num.Value {
+						return fmt.Errorf("gsh.completion.maxVisibleItems must be an integer")
+					}
+					if num.Value > float64(int(^uint(0)>>1)) {
+						return fmt.Errorf("gsh.completion.maxVisibleItems is too large")
+					}
+					return i.sdkConfig.SetCompletionMaxVisibleItems(int(num.Value))
+				},
+			},
+		},
+	}
+
 	// Create gsh.lastAgentRequest object (read-only, but properties updated by system)
 	lastAgentRequestObj := &DynamicValue{
 		Get: func() Value { return i.sdkConfig.GetLastAgentRequest() },
@@ -159,6 +183,7 @@ func (i *Interpreter) registerGshSDK() {
 			"version":            {Value: &StringValue{Value: i.version}, ReadOnly: true},
 			"terminal":           {Value: terminalObj, ReadOnly: true},
 			"logging":            {Value: loggingObj},
+			"completion":         {Value: completionObj, ReadOnly: true},
 			"lastAgentRequest":   {Value: lastAgentRequestObj, ReadOnly: true},
 			"tools":              {Value: toolsObj, ReadOnly: true},
 			"ui":                 {Value: uiObj, ReadOnly: true},

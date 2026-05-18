@@ -33,6 +33,8 @@ type RenderConfig struct {
 	SelectedStyle lipgloss.Style
 }
 
+const defaultCompletionMaxVisible = 10
+
 // DefaultRenderConfig returns a RenderConfig with sensible default styles.
 func DefaultRenderConfig() RenderConfig {
 	return RenderConfig{
@@ -52,10 +54,11 @@ func DefaultRenderConfig() RenderConfig {
 
 // Renderer handles rendering of input components.
 type Renderer struct {
-	config             RenderConfig
-	width              int
-	highlighter        *Highlighter
-	continuationPrompt string
+	config               RenderConfig
+	width                int
+	highlighter          *Highlighter
+	continuationPrompt   string
+	completionMaxVisible int
 }
 
 // NewRenderer creates a new Renderer with the given configuration.
@@ -65,10 +68,27 @@ func NewRenderer(config RenderConfig, h *Highlighter) *Renderer {
 	}
 
 	return &Renderer{
-		config:      config,
-		width:       80, // default width
-		highlighter: h,
+		config:               config,
+		width:                80, // default width
+		highlighter:          h,
+		completionMaxVisible: defaultCompletionMaxVisible,
 	}
+}
+
+// SetCompletionMaxVisible sets how many completion items are visible at once.
+func (r *Renderer) SetCompletionMaxVisible(maxVisible int) {
+	if maxVisible <= 0 {
+		maxVisible = defaultCompletionMaxVisible
+	}
+	r.completionMaxVisible = maxVisible
+}
+
+// CompletionMaxVisible returns how many completion items are visible at once.
+func (r *Renderer) CompletionMaxVisible() int {
+	if r.completionMaxVisible <= 0 {
+		return defaultCompletionMaxVisible
+	}
+	return r.completionMaxVisible
 }
 
 // SetContinuationPrompt sets the prompt displayed on continuation lines for multi-line input.
@@ -597,7 +617,7 @@ func (r *Renderer) RenderCompletionBox(cs *CompletionState, maxVisible int) stri
 	}
 
 	if maxVisible <= 0 {
-		maxVisible = 4 // default
+		maxVisible = defaultCompletionMaxVisible
 	}
 
 	suggestions := cs.Suggestions()
@@ -732,7 +752,7 @@ func (r *Renderer) RenderFullView(
 	// Render completion box if active
 	if completion != nil && completion.IsVisible() {
 		result.WriteString("\n")
-		result.WriteString(r.RenderCompletionBox(completion, 4))
+		result.WriteString(r.RenderCompletionBox(completion, r.CompletionMaxVisible()))
 	}
 
 	// Render info panel content
@@ -781,32 +801,27 @@ func CalculateCursorPosition(prompt string, text string, cursorPos int) int {
 
 // calculateVisibleWindow determines the start and end indices for a scrolling window.
 func calculateVisibleWindow(selected, total, maxVisible int) (start, end int) {
+	if total <= 0 || maxVisible <= 0 {
+		return 0, 0
+	}
+	if selected < 0 {
+		selected = 0
+	}
+	if selected >= total {
+		selected = total - 1
+	}
 	if total <= maxVisible {
 		return 0, total
 	}
 
-	// Try to keep selection roughly in the middle
-	if selected < 2 {
-		start = 0
-	} else if selected >= total-2 {
-		start = total - maxVisible
-	} else {
-		start = selected - 1
-	}
-
-	end = start + maxVisible
-
-	// Ensure bounds
+	start = selected - (maxVisible-1)/2
 	if start < 0 {
 		start = 0
 	}
-	if end > total {
-		end = total
-		start = end - maxVisible
-		if start < 0 {
-			start = 0
-		}
+	if start+maxVisible > total {
+		start = total - maxVisible
 	}
+	end = start + maxVisible
 
 	return start, end
 }

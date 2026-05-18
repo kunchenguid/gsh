@@ -43,7 +43,7 @@ Use terminal dimensions to format output appropriately for the user's screen siz
 
 ## `gsh.logging`
 
-**Type:** `object`  
+**Type:** `object`
 **Availability:** REPL + Script
 
 Controls logging behavior.
@@ -78,6 +78,30 @@ View logs with:
 
 ```bash
 tail -f ~/.gsh/gsh.log
+```
+
+## `gsh.completion`
+
+**Type:** `object`
+**Availability:** REPL + Script
+
+Controls tab-completion menu behavior.
+
+### Properties
+
+| Property                         | Type                  | Description                                              |
+| -------------------------------- | --------------------- | -------------------------------------------------------- |
+| `gsh.completion.maxVisibleItems` | `number` (read/write) | Number of completion suggestions shown at once           |
+
+The value must be an integer from `1` through the maximum supported Go `int` value.
+The default is `10`.
+Set this in `~/.gsh/repl.gsh` to show more or fewer completion options before the menu scrolls.
+
+### Example
+
+```gsh
+# Show up to 20 tab-completion options at once
+gsh.completion.maxVisibleItems = 20
 ```
 
 ## `gsh.prompt`
