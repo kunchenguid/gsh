@@ -6,7 +6,7 @@
 
   outputs = { nixpkgs, ... }:
   let
-    version = "1.10.3"; # x-release-please-version
+    version = "1.11.0"; # x-release-please-version
     forAllSystems = f:
       nixpkgs.lib.genAttrs
         [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ]
