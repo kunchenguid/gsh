@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.1](https://github.com/kunchenguid/gsh/compare/v1.11.0...v1.11.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **ci:** suppress pull_request runs on release-please PRs ([#214](https://github.com/kunchenguid/gsh/issues/214)) ([508dad8](https://github.com/kunchenguid/gsh/commit/508dad8727c7f3c129e3de874aac320182302812))
+
 ## [1.11.0](https://github.com/kunchenguid/gsh/compare/v1.10.3...v1.11.0) (2026-05-18)
 
 
