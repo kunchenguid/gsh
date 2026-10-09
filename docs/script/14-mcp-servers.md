@@ -163,6 +163,38 @@ print(result)
 
 Notice how we use string interpolation in headers: `Bearer ${env.DB_API_KEY}`. This is powerful for building authentication headers dynamically.
 
+### Example: Keyless Web Search and Fetch
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) provides
+free web search and page extraction without an API key. It connects through gsh's
+Streamable HTTP transport, so no local MCP server or extra package is needed.
+Anonymous access has rate limits.
+
+Run the [complete example](examples/parallel-search.gsh) from the repository root
+with an installed gsh:
+
+```bash
+gsh run docs/script/examples/parallel-search.gsh
+```
+
+To build gsh from this checkout instead, install Go and the development tools
+(`make install-tools`, plus [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
+if it was not installed by that command), then run:
+
+```bash
+make build
+./bin/gsh run docs/script/examples/parallel-search.gsh
+```
+
+The script declares `https://search.parallel.ai/mcp` with a `User-Agent` header,
+calls `parallel.web_search` with an objective and keyword queries, then calls
+`parallel.web_fetch` for a specific documentation URL. Each call prints source
+URLs and excerpts. Edit the queries, URL and objectives for your task. The script
+generates one session ID and reuses it across both calls.
+
+These are direct MCP tool calls: no model configuration or inference is needed.
+The example is opt-in and does not change your REPL configuration.
+
 ---
 
 ## Calling MCP Tools
