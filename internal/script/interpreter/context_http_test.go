@@ -58,3 +58,19 @@ func TestContextOpenAIWireLimits(t *testing.T) {
 		})
 	}
 }
+
+func TestContextTruncatedStreamingToolIsNotExecuted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"partial","type":"function","function":{"name":"write","arguments":"{\"path\":"}}]},"finish_reason":"length"}]}`+"\n\ndata: [DONE]\n\n")
+	}))
+	defer server.Close()
+	a := contextTestAgent(NewOpenAIProvider())
+	a.Config["model"].(*ModelValue).Config = map[string]Value{"apiKey": &StringValue{Value: "ollama"}, "model": &StringValue{Value: "gpt-oss:20b"}, "baseURL": &StringValue{Value: server.URL}}
+	a.Config["maxIterations"] = &NumberValue{Value: 1}
+	calls := 0
+	a.Config["tools"] = &ArrayValue{Elements: []Value{&NativeToolValue{Name: "write", Invoke: func(map[string]interface{}) (interface{}, error) { calls++; return "written", nil }}}}
+	_, err := New(nil).ExecuteAgent(context.Background(), &ConversationValue{Messages: []ChatMessage{{Role: "user", Content: "Task"}}}, a, true)
+	require.Zero(t, calls, "the provider received an unfinished JSON argument; do not execute it")
+	require.ErrorContains(t, err, "reserveTokens")
+}

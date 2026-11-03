@@ -84,7 +84,10 @@ func summarizeHistory(ctx context.Context, model *ModelValue, policy *contextPol
 			remaining := encoded[index][offset:]
 			fragment := contextSummaryFragment{MessageIndex: index, Role: older[index].Role, ToolCallID: older[index].ToolCallID, Offset: offset}
 			fragments = append(fragments, fragment)
-			low, high := 0, len(remaining)
+			// JSON escaping cannot shrink text. No candidate longer than the
+			// input allowance can fit, even before its framing is counted.
+			// Bound probes by the window, not by a potentially huge tool result.
+			low, high := 0, min(len(remaining), policy.maxTokens-policy.summaryTokens)
 			for low < high {
 				middle := (low + high + 1) / 2
 				fragments[len(fragments)-1].Text = remaining[:middle]
@@ -108,7 +111,7 @@ func summarizeHistory(ctx context.Context, model *ModelValue, policy *contextPol
 			}
 			// Prefer complete messages: a short correction or failure report
 			// must not become a dangling tail just to fill the current request.
-			if low < len(remaining) && len(fragments) > 1 {
+			if low < len(remaining) && len(fragments) > 1 && len(remaining) <= policy.maxTokens-policy.summaryTokens {
 				whole := fragment
 				whole.Text = remaining
 				size, err := estimateContextTokens(summaryMessages(summary, string(task), []contextSummaryFragment{whole}), nil)

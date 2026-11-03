@@ -26,13 +26,19 @@ func contextLiveModel(t *testing.T) *ModelValue {
 		}
 		return fallback
 	}
-	return &ModelValue{Name: "context-eval", Provider: &contextLiveProvider{ModelProvider: NewOpenAIProvider(), t: t}, Config: map[string]Value{
+	model := &ModelValue{Name: "context-eval", Provider: &contextLiveProvider{ModelProvider: NewOpenAIProvider(), t: t}, Config: map[string]Value{
 		"apiKey":      &StringValue{Value: setting("API_KEY", "ollama")},
 		"baseURL":     &StringValue{Value: setting("BASE_URL", "http://localhost:11434/v1")},
 		"model":       &StringValue{Value: setting("MODEL", "gpt-oss:20b")},
 		"temperature": &NumberValue{Value: 0},
 		"maxTokens":   &NumberValue{Value: 2048},
 	}}
+	if value := os.Getenv("GSH_CONTEXT_LIVE_EXTRA_BODY"); value != "" {
+		var extra map[string]interface{}
+		require.NoError(t, json.Unmarshal([]byte(value), &extra))
+		model.Config["extraBody"] = InterfaceToValue(extra)
+	}
+	return model
 }
 
 type contextLiveProvider struct {
@@ -54,10 +60,25 @@ type contextFidelityCase struct {
 	want     map[string]string
 }
 
+const contextFidelityQuestion = "Return ONLY a JSON object with string values for: config_path, release_id, exit_code, deployed, next_step. Use the exact recorded identifiers; deployed is yes/no, next_step is the pending command."
+
 func contextFidelityCases() []contextFidelityCase {
 	noise := strings.Repeat("DEBUG heartbeat: healthy; no configuration or deployment changes.\n", 220)
-	question := "Return ONLY a JSON object with string values for: config_path, release_id, exit_code, deployed, next_step. Use the exact recorded identifiers; deployed is yes/no, next_step is the pending command."
+	question := contextFidelityQuestion
 	return []contextFidelityCase{
+		{
+			name: "completed_work_after_latest_request",
+			messages: []ChatMessage{
+				{Role: "user", Content: "Maintain the staging service using the recorded evidence."},
+				{Role: "assistant", Content: "Ready."},
+				{Role: "user", Content: "Deployment is pending: config_path=/srv/pine/staging.yaml, release_id=rel-3a8c. Run deploy-once just once, then inspect logs. Afterward, " + question},
+				{Role: "assistant", ToolCalls: []ChatToolCall{{ID: "deploy", Name: "deploy_once"}}},
+				{Role: "tool", ToolCallID: "deploy", Content: "deploy-once completed successfully, exit_code=0; deployed=yes. config_path=/srv/pine/staging.yaml, release_id=rel-3a8c. Never repeat this completed action.\n" + strings.Repeat("DEBUG deployment audit line.\n", 500)},
+				{Role: "assistant", ToolCalls: []ChatToolCall{{ID: "logs", Name: "read_log"}}},
+				{Role: "tool", ToolCallID: "logs", Content: "Logs are clean. The sole next pending command is verify-health. It has not been executed."},
+			},
+			want: map[string]string{"config_path": "/srv/pine/staging.yaml", "release_id": "rel-3a8c", "exit_code": "0", "deployed": "yes", "next_step": "verify-health"},
+		},
 		{
 			name: "superseded_initial_request",
 			messages: []ChatMessage{
@@ -164,7 +185,7 @@ func TestContextLiveFidelity(t *testing.T) {
 			}
 			// Compact an already compacted conversation again: old memory must
 			// survive a new batch of tool-free diagnostic noise.
-			compacted.Messages = append(compacted.Messages, ChatMessage{Role: "assistant", Content: strings.Repeat("Routine diagnostic heartbeat; no new decisions.\n", 350)}, tc.messages[len(tc.messages)-1])
+			compacted.Messages = append(compacted.Messages, ChatMessage{Role: "assistant", Content: strings.Repeat("Routine diagnostic heartbeat; no new decisions.\n", 350)}, ChatMessage{Role: "user", Content: contextFidelityQuestion})
 			again, repeatUsage, err := compactContext(ctx, compacted, agent, model, nil, policy, false)
 			require.NoError(t, err)
 			require.Equal(t, 2, again.CompactionCount)

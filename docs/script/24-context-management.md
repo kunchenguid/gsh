@@ -67,7 +67,9 @@ All settings are positive integers. Both output reservations must be smaller
 than `maxTokens`. Unknown context settings are rejected. Agent settings override
 the model window. `context: null` explicitly disables automatic compaction for
 that agent, even when its model declares a window. Dynamic SDK model references
-are resolved at execution time.
+are resolved at execution time. Declarations validate override fields; the window
+and model-dependent constraints are validated against the current model before
+execution or manual compaction, so a later tier replacement is respected.
 
 Reasoning models may need a larger `summaryTokens` (for example, 4096) to leave
 room for the actual memory after internal reasoning. If the model stops with
@@ -76,6 +78,13 @@ original history. Increase this setting explicitly, keeping it below
 `maxTokens` and leaving enough input space for task context and prior memory.
 There is no automatic retry or silent increase in cost.
 
+Normal responses also need room for reasoning and visible output. With context
+management enabled, `finish_reason=length` fails with a recoverable conversation
+and the `max_tokens` stop reason. Incomplete text is not committed to history,
+and no tool calls from that response execute. Streamed text may already be
+visible before the error arrives. Increase `context.reserveTokens` (and a smaller
+`model.maxTokens`, if configured), within the total context window, before retrying.
+
 ## What is preserved
 
 The first and latest user messages remain verbatim, as do the most recent
@@ -83,9 +92,11 @@ messages and the original system prompt. Assistant tool calls and their results
 are never split at the retained-history boundary. Older messages are summarized
 into separate conversation memory, which is sent as clearly labeled historical
 user data rather than elevated to a system instruction.
-The initial request precedes this memory, and recent messages follow it. This
-keeps later corrections in the memory from being overridden by stale values in
-the initial request.
+Memory is inserted at the end of its compacted span, before the recent suffix.
+Pinned user requests inside that span precede the memory of their subsequent
+results. Repeated compaction includes those requests and prior memory in their
+recorded order, preventing an old pending request from following its completion
+record. The initial request cannot override later corrections in memory.
 
 The summarizer is instructed to retain goals, constraints, observed results,
 decisions, relevant identifiers, completed actions, and unfinished work. A model
@@ -100,6 +111,11 @@ a failed or cancelled summary. `gsh.compact(conversation, agent)` returns a new
 conversation on success, or the original value for a no-op. Empty, truncated,
 non-text, over-budget, and non-shrinking summaries are rejected. There are no
 automatic retries or tool executions during summarization.
+
+If there is no older history and the request already fits (including an exact
+budget match), manual compaction is a no-op. When even a minimal summary plus
+its message framing cannot fit alongside protected content, gsh fails before
+making any summary calls.
 
 ## Recovering from an automatic-compaction error
 
@@ -123,6 +139,8 @@ history avoids losing the record of completed actions; it does not implement
 exactly-once execution of external side effects. Manual-compaction failures do
 not need recovery because the input conversation remains unchanged. The default
 REPL middleware retains recoverable history automatically.
+If an error returns no recoverable history, the REPL also keeps the previous
+directory marker so a retry still includes any pending directory change.
 
 ## Accounting and limits
 

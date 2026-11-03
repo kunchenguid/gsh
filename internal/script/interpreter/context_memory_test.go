@@ -11,7 +11,7 @@ import (
 
 func TestContextSummaryFollowsInitialRequest(t *testing.T) {
 	agent := contextTestAgent(&contextTestProvider{})
-	conv := &ConversationValue{Summary: "User corrected the path to /new.", Messages: []ChatMessage{
+	conv := &ConversationValue{SummaryIndex: 1, Summary: "User corrected the path to /new.", Messages: []ChatMessage{
 		{Role: "user", Content: "Use /old."},
 		{Role: "assistant", Content: "Recent observation"},
 		{Role: "user", Content: "Continue."},
@@ -24,6 +24,7 @@ func TestContextSummaryFollowsInitialRequest(t *testing.T) {
 	require.Equal(t, conv.Messages[1:], messages[3:])
 	// No user message: memory still precedes recent messages.
 	conv.Messages = conv.Messages[1:2]
+	conv.SummaryIndex = 0
 	messages = contextMessages(agent, conv)
 	require.Contains(t, messages[1].Content, conv.Summary)
 	require.Equal(t, conv.Messages[0], messages[2])
@@ -36,7 +37,7 @@ func TestContextSummaryFragmentsRetainTaskAndProvenance(t *testing.T) {
 	conv.Messages[2].Content = strings.Repeat("中文🙂 evidence\n", 900)
 	_, err := New(nil).CompactConversation(context.Background(), conv, a)
 	require.NoError(t, err)
-	older, _, err := compactionParts(conv.Messages, 2)
+	older, _, _, err := compactionParts(conv.Messages, 2)
 	require.NoError(t, err)
 	reconstructed := make([]string, len(older))
 	for _, request := range p.requests {

@@ -190,12 +190,12 @@ func TestContextCompactionKeepsEntireParallelToolBatch(t *testing.T) {
 		{Role: "assistant", ToolCalls: []ChatToolCall{{ID: "a"}, {ID: "b"}}},
 		{Role: "tool", ToolCallID: "a", Content: "A"}, {Role: "tool", ToolCallID: "b", Content: "B"},
 	}
-	older, retained, err := compactionParts(messages, 1)
+	older, retained, _, err := compactionParts(messages, 1)
 	require.NoError(t, err)
 	require.Equal(t, messages[1:2], older)
 	require.Equal(t, append([]ChatMessage{messages[0]}, messages[2:]...), retained)
 	messages[4].ToolCallID = "missing"
-	_, _, err = compactionParts(messages, 1)
+	_, _, _, err = compactionParts(messages, 1)
 	require.Error(t, err)
 }
 

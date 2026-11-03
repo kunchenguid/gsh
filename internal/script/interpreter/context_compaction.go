@@ -25,22 +25,16 @@ func contextInteger(name string, value Value) (int, error) {
 	return int(n.Value), nil
 }
 
-func readContextPolicy(agent *AgentValue, model *ModelValue) (*contextPolicy, error) {
-	policy := &contextPolicy{reserveTokens: 1024, summaryTokens: 1024, keepRecentMessages: 6}
-	if window, ok := model.Config["contextWindow"]; ok {
-		n, err := contextInteger("contextWindow", window)
-		if err != nil {
-			return nil, err
-		}
-		policy.maxTokens = n
-	}
+// applyContextConfig validates model-independent overrides. Model references
+// remain dynamic, so a missing window is only an error at execution time.
+func applyContextConfig(agent *AgentValue, policy *contextPolicy) (bool, error) {
 	if value, ok := agent.Config["context"]; ok {
 		if value.Type() == ValueTypeNull {
-			return nil, nil
+			return true, nil
 		}
 		obj, ok := value.(*ObjectValue)
 		if !ok {
-			return nil, fmt.Errorf("agent context must be an object or null")
+			return false, fmt.Errorf("agent context must be an object or null")
 		}
 		for key := range obj.Properties {
 			var target *int
@@ -54,23 +48,39 @@ func readContextPolicy(agent *AgentValue, model *ModelValue) (*contextPolicy, er
 			case "keepRecentMessages":
 				target = &policy.keepRecentMessages
 			default:
-				return nil, fmt.Errorf("unknown agent context setting %q", key)
+				return false, fmt.Errorf("unknown agent context setting %q", key)
 			}
 			n, err := contextInteger(key, obj.GetPropertyValue(key))
 			if err != nil {
-				return nil, err
+				return false, err
 			}
 			*target = n
 		}
-		if policy.maxTokens == 0 {
-			return nil, fmt.Errorf("agent context requires maxTokens or model.contextWindow")
+	}
+	if policy.maxTokens > 0 && (policy.reserveTokens >= policy.maxTokens || policy.summaryTokens >= policy.maxTokens) {
+		return false, fmt.Errorf("context reserveTokens and summaryTokens must each be smaller than maxTokens")
+	}
+	return false, nil
+}
+
+func readContextPolicy(agent *AgentValue, model *ModelValue) (*contextPolicy, error) {
+	policy := &contextPolicy{reserveTokens: 1024, summaryTokens: 1024, keepRecentMessages: 6}
+	if window, ok := model.Config["contextWindow"]; ok {
+		n, err := contextInteger("contextWindow", window)
+		if err != nil {
+			return nil, err
 		}
+		policy.maxTokens = n
+	}
+	disabled, err := applyContextConfig(agent, policy)
+	if err != nil || disabled {
+		return nil, err
+	}
+	if _, configured := agent.Config["context"]; configured && policy.maxTokens == 0 {
+		return nil, fmt.Errorf("agent context requires maxTokens or model.contextWindow")
 	}
 	if policy.maxTokens == 0 {
 		return nil, nil
-	}
-	if policy.reserveTokens >= policy.maxTokens || policy.summaryTokens >= policy.maxTokens {
-		return nil, fmt.Errorf("context reserveTokens and summaryTokens must each be smaller than maxTokens")
 	}
 	if extra, ok := model.Config["extraBody"].(*ObjectValue); ok {
 		for _, key := range []string{"messages", "tools", "model", "max_tokens", "max_completion_tokens", "functions", "function_call", "tool_choice"} {
@@ -100,21 +110,16 @@ func contextMessages(agent *AgentValue, conv *ConversationValue) []ChatMessage {
 		messages = append(messages, ChatMessage{Role: "system", Content: prompt.Value})
 	}
 	if conv.Summary != "" {
-		// Historical model-generated text is data, never elevated to system policy.
-		// Keep chronology: the initial request precedes memory of later changes.
-		// Otherwise its stale values can override corrections in the summary.
-		firstUser := -1
-		for index, message := range conv.Messages {
-			if message.Role == "user" {
-				firstUser = index
-				break
-			}
-		}
-		messages = append(messages, conv.Messages[:firstUser+1]...)
-		messages = append(messages, ChatMessage{Role: "user", Content: "Historical conversation summary after the initial request (may be incomplete; later corrections supersede earlier values; verify facts):\n" + conv.Summary})
-		return append(messages, conv.Messages[firstUser+1:]...)
+		index := min(max(conv.SummaryIndex, 0), len(conv.Messages))
+		messages = append(messages, conv.Messages[:index]...)
+		messages = append(messages, contextMemoryMessage(conv.Summary))
+		return append(messages, conv.Messages[index:]...)
 	}
 	return append(messages, conv.Messages...)
+}
+
+func contextMemoryMessage(summary string) ChatMessage {
+	return ChatMessage{Role: "user", Content: "Historical conversation summary through this point (may be incomplete; later corrections supersede earlier values; verify facts):\n" + summary}
 }
 
 func modelWithOutputLimit(model *ModelValue, limit int, capExisting bool) *ModelValue {
@@ -133,7 +138,7 @@ func modelWithOutputLimit(model *ModelValue, limit int, capExisting bool) *Model
 // compactionParts keeps the first and latest user messages verbatim, plus at
 // least the requested recent messages. A boundary may move backwards to retain
 // a complete assistant tool-call batch and every corresponding tool result.
-func compactionParts(messages []ChatMessage, keep int) ([]ChatMessage, []ChatMessage, error) {
+func compactionParts(messages []ChatMessage, keep int) ([]ChatMessage, []ChatMessage, int, error) {
 	cut := len(messages) - keep
 	if cut < 0 {
 		cut = 0
@@ -148,21 +153,21 @@ func compactionParts(messages []ChatMessage, keep int) ([]ChatMessage, []ChatMes
 		switch message.Role {
 		case "tool":
 			if !pending[message.ToolCallID] {
-				return nil, nil, fmt.Errorf("context history contains an unmatched tool result")
+				return nil, nil, 0, fmt.Errorf("context history contains an unmatched tool result")
 			}
 			delete(pending, message.ToolCallID)
 		default:
 			if len(pending) > 0 {
-				return nil, nil, fmt.Errorf("context history contains incomplete tool results")
+				return nil, nil, 0, fmt.Errorf("context history contains incomplete tool results")
 			}
 			if len(message.ToolCalls) > 0 {
 				if message.Role != "assistant" {
-					return nil, nil, fmt.Errorf("context tool calls require an assistant message")
+					return nil, nil, 0, fmt.Errorf("context tool calls require an assistant message")
 				}
 				batchStart = index
 				for _, call := range message.ToolCalls {
 					if call.ID == "" || pending[call.ID] {
-						return nil, nil, fmt.Errorf("context history contains invalid tool call IDs")
+						return nil, nil, 0, fmt.Errorf("context history contains invalid tool call IDs")
 					}
 					pending[call.ID] = true
 				}
@@ -176,17 +181,43 @@ func compactionParts(messages []ChatMessage, keep int) ([]ChatMessage, []ChatMes
 		}
 	}
 	if len(pending) > 0 {
-		return nil, nil, fmt.Errorf("context history contains incomplete tool results")
+		return nil, nil, 0, fmt.Errorf("context history contains incomplete tool results")
 	}
 	var older, retained []ChatMessage
+	end := 0
 	for index, message := range messages {
 		if index >= cut || index == firstUser || index == lastUser {
 			retained = append(retained, message)
 		} else {
 			older = append(older, message)
+			end = index + 1
 		}
 	}
-	return older, retained, nil
+	return older, retained, end, nil
+}
+
+// Reconstruct the compacted span in chronology, including pinned users that
+// fall inside it. On repeated compaction the previous memory stays at its
+// recorded position, rather than being prepended to older retained requests.
+func compactionTranscript(conv *ConversationValue, cut int) []ChatMessage {
+	var transcript []ChatMessage
+	firstUser := true
+	for index := 0; index <= cut; index++ {
+		if conv.Summary != "" && index == conv.SummaryIndex {
+			transcript = append(transcript, contextMemoryMessage(conv.Summary))
+		}
+		if index == cut {
+			break
+		}
+		message := conv.Messages[index]
+		if message.Role == "user" && firstUser {
+			// The pinned initial request already appears in task_context.
+			firstUser = false
+			continue
+		}
+		transcript = append(transcript, message)
+	}
+	return transcript
 }
 
 func compactContext(ctx context.Context, conv *ConversationValue, agent *AgentValue, model *ModelValue, tools []ChatTool, policy *contextPolicy, force bool) (*ConversationValue, ChatUsage, error) {
@@ -202,17 +233,9 @@ func compactContext(ctx context.Context, conv *ConversationValue, agent *AgentVa
 	if !force && before <= budget {
 		return conv, usage, nil
 	}
-	older, retained, err := compactionParts(conv.Messages, policy.keepRecentMessages)
+	older, retained, cut, err := compactionParts(conv.Messages, policy.keepRecentMessages)
 	if err != nil {
 		return nil, usage, err
-	}
-	candidate := &ConversationValue{Messages: retained, CompactionCount: conv.CompactionCount}
-	protected, err := estimateContextTokens(contextMessages(agent, candidate), tools)
-	if err != nil {
-		return nil, usage, err
-	}
-	if protected >= budget {
-		return nil, usage, fmt.Errorf("context budget cannot fit system prompt, tools, task, and recent messages; increase maxTokens or reduce keepRecentMessages/input")
 	}
 	if len(older) == 0 {
 		if before > budget {
@@ -220,7 +243,20 @@ func compactContext(ctx context.Context, conv *ConversationValue, agent *AgentVa
 		}
 		return conv, usage, nil
 	}
-	candidate.Summary, usage, err = summarizeHistory(ctx, model, policy, conv.Summary, older, retained)
+	// Even the shortest nonempty memory needs a framed message. Reject an
+	// impossible budget before charging for any summarization requests.
+	// Place memory at the end of the compacted span, after any pinned users
+	// inside that span and before the untouched recent suffix.
+	summaryIndex := len(retained) - (len(conv.Messages) - cut)
+	candidate := &ConversationValue{Messages: retained, Summary: "x", SummaryIndex: summaryIndex, CompactionCount: conv.CompactionCount}
+	protected, err := estimateContextTokens(contextMessages(agent, candidate), tools)
+	if err != nil {
+		return nil, usage, err
+	}
+	if protected > budget {
+		return nil, usage, fmt.Errorf("context budget cannot fit system prompt, tools, task, recent messages, and summary framing; increase maxTokens or reduce keepRecentMessages/input")
+	}
+	candidate.Summary, usage, err = summarizeHistory(ctx, model, policy, "", compactionTranscript(conv, cut), retained)
 	if err != nil {
 		return nil, usage, err
 	}

@@ -569,7 +569,9 @@ type ConversationValue struct {
 	// Messages in the conversation history
 	Messages []ChatMessage
 	// Summary contains compacted historical data, not system instructions.
-	Summary         string
+	Summary string
+	// SummaryIndex is the insertion position among Messages (before the recent suffix).
+	SummaryIndex    int
 	CompactionCount int
 }
 

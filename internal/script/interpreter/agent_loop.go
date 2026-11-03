@@ -133,15 +133,19 @@ func (i *Interpreter) executeAgentInternal(ctx context.Context, conv *Conversati
 	// Create new conversation with response (excluding system messages)
 	// System prompts should not be stored in conversations
 	userMessages := []ChatMessage{}
-	for _, msg := range conv.Messages {
+	summaryIndex := conv.SummaryIndex
+	for index, msg := range conv.Messages {
 		if msg.Role != "system" {
 			userMessages = append(userMessages, msg)
+		} else if index < conv.SummaryIndex {
+			summaryIndex--
 		}
 	}
 
 	newConv := &ConversationValue{
 		Messages:        make([]ChatMessage, len(userMessages)),
 		Summary:         conv.Summary,
+		SummaryIndex:    summaryIndex,
 		CompactionCount: conv.CompactionCount,
 	}
 	copy(newConv.Messages, userMessages)
@@ -253,6 +257,15 @@ func (i *Interpreter) executeAgentInternal(ctx context.Context, conv *Conversati
 		// Call response callback
 		if callbacks != nil && callbacks.OnResponse != nil {
 			callbacks.OnResponse(response)
+		}
+
+		// The reserved output budget can run out during reasoning or a tool
+		// argument. Neither an empty answer nor an unfinished tool batch is a
+		// completed turn. Keep only the completed history for recovery.
+		if policy != nil && response.FinishReason == "length" {
+			err := fmt.Errorf("agent response exhausted output limit %v; increase context.reserveTokens and, if lower, model.maxTokens while keeping the request within context.maxTokens; incomplete response discarded", requestModel.Config["maxTokens"])
+			callOnComplete(acp.StopReasonMaxTokens, err)
+			return newConv, err
 		}
 
 		// If no tool calls, add final response and return

@@ -165,6 +165,7 @@ func (i *Interpreter) addMessageToConversation(conv *ConversationValue, message 
 	newConv := &ConversationValue{
 		Messages:        make([]ChatMessage, len(conv.Messages)),
 		Summary:         conv.Summary,
+		SummaryIndex:    conv.SummaryIndex,
 		CompactionCount: conv.CompactionCount,
 	}
 	copy(newConv.Messages, conv.Messages)
@@ -194,12 +195,14 @@ func (i *Interpreter) executeAgentWithConversation(conv *ConversationValue, agen
 	}
 
 	// Add all messages from the conversation
+	summaryIndex := conv.SummaryIndex + len(messages)
 	messages = append(messages, conv.Messages...)
 
 	// Create a temporary conversation with system prompt for execution
 	execConv := &ConversationValue{
 		Messages:        messages,
 		Summary:         conv.Summary,
+		SummaryIndex:    summaryIndex,
 		CompactionCount: conv.CompactionCount,
 	}
 

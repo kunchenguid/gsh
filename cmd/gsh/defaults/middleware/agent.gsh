@@ -57,7 +57,6 @@ tool __defaultAgentMiddleware(ctx, next) {
             # Directory changed - prepend current directory info
             message = `<current_directory>${currentDir}</current_directory>` + "\n\n" + message
         }
-        __lastKnownDirectory = currentDir
         
         # Chat with the default agent using pipe expressions
         try {
@@ -66,9 +65,11 @@ tool __defaultAgentMiddleware(ctx, next) {
             } else {
                 __conversation = __conversation | message | __defaultAgent
             }
+            __lastKnownDirectory = currentDir
         } catch (e) {
             if (e.conversation != null) {
                 __conversation = e.conversation
+                __lastKnownDirectory = currentDir
             }
             print("gsh: " + e.message)
         }
