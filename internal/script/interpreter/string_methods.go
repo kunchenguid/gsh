@@ -338,12 +338,11 @@ func stringPadStartImpl(str *StringValue, args []Value) (Value, error) {
 	}
 
 	padLength := targetLength - currentLength
-	padRunes := []rune(padString)
 
 	// Build the padding
 	var padding strings.Builder
 	for padding.Len() < padLength {
-		for _, r := range padRunes {
+		for _, r := range padString {
 			if padding.Len() >= padLength {
 				break
 			}
@@ -384,12 +383,11 @@ func stringPadEndImpl(str *StringValue, args []Value) (Value, error) {
 	}
 
 	padLength := targetLength - currentLength
-	padRunes := []rune(padString)
 
 	// Build the padding
 	var padding strings.Builder
 	for padding.Len() < padLength {
-		for _, r := range padRunes {
+		for _, r := range padString {
 			if padding.Len() >= padLength {
 				break
 			}
