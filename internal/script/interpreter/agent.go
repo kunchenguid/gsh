@@ -56,7 +56,12 @@ func (i *Interpreter) evalAgentDeclaration(env *Environment, node *parser.AgentD
 		Config: config,
 	}
 
-	// Register the agent in the environment
+	// Validate only declaration-local overrides; the model may be replaced
+	// through gsh.models before this agent is executed.
+	policy := &contextPolicy{reserveTokens: 1024, summaryTokens: 1024, keepRecentMessages: 6}
+	if _, err := applyContextConfig(agent, policy); err != nil {
+		return nil, err
+	}
 	env.Set(agentName, agent)
 
 	return agent, nil

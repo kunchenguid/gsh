@@ -186,6 +186,7 @@ func (i *Interpreter) registerGshSDK() {
 			"completion":         {Value: completionObj, ReadOnly: true},
 			"lastAgentRequest":   {Value: lastAgentRequestObj, ReadOnly: true},
 			"tools":              {Value: toolsObj, ReadOnly: true},
+			"compact":            {Value: &BuiltinValue{Name: "gsh.compact", Fn: i.builtinCompact}, ReadOnly: true},
 			"ui":                 {Value: uiObj, ReadOnly: true},
 			"models":             {Value: modelsObj, ReadOnly: true},
 			"lastCommand":        {Value: lastCommandObj, ReadOnly: true},

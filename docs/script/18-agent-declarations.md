@@ -1,5 +1,8 @@
 # Chapter 18: Agent Declarations
 
+Agents can opt into [context budgets and automatic compaction](24-context-management.md)
+using a `context` configuration object or their model's `contextWindow` setting.
+
 ## Opening: What's an Agent?
 
 You've learned to declare models (LLM connections) in Chapter 17. But models alone are passive — they sit there configured, waiting. An **agent** is where things get intelligent. An agent brings together three things:

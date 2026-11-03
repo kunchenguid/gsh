@@ -61,12 +61,13 @@ This guide is organized into 7 logical parts, progressing from basics to advance
 - [Chapter 15: MCP Tool Invocation](15-mcp-tool-invocation.md) - Call MCP server tools
 - [Chapter 16: Shell Commands](16-shell-commands.md) - Execute and capture shell output
 
-**Part 6: AI Agents** (4 chapters)
+**Part 6: AI Agents** (5 chapters)
 
 - [Chapter 17: Model Declarations](17-model-declarations.md) - Configure LLM providers
 - [Chapter 18: Agent Declarations](18-agent-declarations.md) - Create AI agents
 - [Chapter 19: Conversations and Pipes](19-conversations-and-pipes.md) - Pipe data to agents
 - [Chapter 23: ACP Agents](23-acp-agents.md) - Integrate with external agents via ACP
+- [Chapter 24: Context Management](24-context-management.md) - Budget and compact long agent conversations
 
 **Part 7: Reference** (3 chapters)
 

@@ -262,6 +262,11 @@ Every model declaration needs:
 
 ### Optional Parameters
 
+`contextWindow` is an optional positive integer enabling gsh's context budget
+and automatic compaction for agents using this model. It is not sent as a server
+configuration parameter. See [Context management](24-context-management.md) for
+output reservations, per-agent overrides, and estimation limits.
+
 - **`temperature`** (default: 0.7) - Controls randomness in responses (0.0-1.0)
 - **`baseURL`** - For Ollama or self-hosted services, the URL to the API endpoint
 - **`timeout`** - Request timeout in milliseconds for model API calls

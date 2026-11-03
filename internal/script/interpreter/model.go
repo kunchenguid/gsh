@@ -21,6 +21,10 @@ func (i *Interpreter) evalModelDeclaration(env *Environment, node *parser.ModelD
 
 		// Validate common config fields
 		switch key {
+		case "contextWindow":
+			if _, err := contextInteger("contextWindow", value); err != nil {
+				return nil, err
+			}
 		case "provider":
 			if _, ok := value.(*StringValue); !ok {
 				return nil, fmt.Errorf("model config 'provider' must be a string, got %s", value.Type())
