@@ -11,7 +11,7 @@ Start Ollama with `gpt-oss:20b`, configured for at least a 32K context window so
 the uncompressed control fits. Then run:
 
 ```bash
-GSH_CONTEXT_LIVE=1 go test -count=2 -timeout=15m -v \
+GSH_CONTEXT_LIVE=1 go test -count=2 -timeout=70m -v \
   ./internal/script/interpreter -run '^TestContextLiveFidelity$'
 ```
 
@@ -19,7 +19,7 @@ PowerShell:
 
 ```powershell
 $env:GSH_CONTEXT_LIVE = '1'
-go test -count=2 -timeout=15m -v ./internal/script/interpreter -run '^TestContextLiveFidelity$'
+go test -count=2 -timeout=70m -v ./internal/script/interpreter -run '^TestContextLiveFidelity$'
 Remove-Item Env:GSH_CONTEXT_LIVE
 ```
 
@@ -64,6 +64,49 @@ The deterministic `TestContextSummaryFollowsInitialRequest` regression checks
 chronology independently of a particular model. The fragment test checks task
 context, source roles, tool IDs, offsets, and exact lossless reassembly of all
 serialized historical messages, including Unicode split across requests.
+
+An additional opt-in `TestContextLiveToolContinuation` runs a real agent with
+an in-memory `read_item` tool. It requires eight ordered reads, at least one
+automatic compaction during that turn, no duplicate attempts (including
+rejected ones), and a final `DONE`. No files or shell commands are accessed.
+With the same environment settings, run:
+
+```bash
+go test -count=2 -timeout=10m -v ./internal/script/interpreter \
+  -run '^TestContextLiveToolContinuation$'
+```
+
+This smoke test uses a 10,000-token estimated window, a 2,048-token summary
+budget and a 2,048-token answer reserve. It supplements the golden-answer
+fixtures; it does not establish exactly-once execution for arbitrary agents.
+
+## Regression found in the initial draft
+
+During a real-model run against draft `cb9bae9`, the uncompressed control used
+the corrected `/srv/new/app.yaml` and `rel-new-222`. After a second compaction,
+the answer reverted to `/srv/old/app.yaml` and `rel-old-111`, even though the
+memory still contained the correction. The request placed memory before the
+initial user message. Moving it after that initial message preserves the order
+of corrections; the deterministic chronology test covers this independently of
+model variability.
+
+The same evaluation exposed missing task context in summaries and fragments
+that lost their source role inside large messages. Summary requests now carry
+the retained task context and label every fragment. Small messages stay whole
+when they fit on their own; long messages prefer nearby line boundaries.
+
+A 1,024-token summary limit also produced `finish_reason=length` with zero
+visible content and 1,024 completion tokens on the Pro route. Such a response
+does not contain usable memory. It remains a failure with the original history
+intact, now with an actionable `summaryTokens` diagnostic. Increasing the
+budget is an explicit configuration choice, not a hidden retry.
+
+Each fixture allows eight minutes for its control, multiple summary passes and
+continuations together. A shorter four-minute fixture deadline exhausted its
+time in the final automatic-compaction phase on the slower route despite the
+earlier fact checks passing. This is a harness deadline, not a fact-retention
+failure. Individual fixtures can be selected with `-run` and run independently
+to reduce wall time, subject to the provider's concurrency limits.
 
 ## Limits
 

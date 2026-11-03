@@ -3,6 +3,7 @@ package interpreter
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -128,7 +129,7 @@ func TestContextLiveFidelity(t *testing.T) {
 	t.Logf("model=%s summaryTokens=%d", model.Config["model"].(*StringValue).Value, summaryTokens)
 	for _, tc := range contextFidelityCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 			defer cancel()
 			agent := &AgentValue{Name: "eval", Config: map[string]Value{
 				"model":        model,
@@ -180,4 +181,42 @@ func TestContextLiveFidelity(t *testing.T) {
 			})
 		})
 	}
+}
+
+// Execute only a synthetic in-memory tool. This checks that a real agent can
+// continue a tool-heavy turn after compaction without repeating completed reads.
+func TestContextLiveToolContinuation(t *testing.T) {
+	model := contextLiveModel(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	agent := &AgentValue{Name: "tool-eval", Config: map[string]Value{
+		"model":         model,
+		"systemPrompt":  &StringValue{Value: "Complete the user's synthetic read-only task. Call exactly one tool at a time. Use recorded results to avoid repeating completed reads."},
+		"context":       InterfaceToValue(map[string]interface{}{"maxTokens": 10000, "reserveTokens": 2048, "summaryTokens": 2048, "keepRecentMessages": 1}),
+		"maxIterations": &NumberValue{Value: 12},
+	}}
+	want := []string{"item-01", "item-02", "item-03", "item-04", "item-05", "item-06", "item-07", "item-08"}
+	var seen, attempts []string
+	readTool := &NativeToolValue{Name: "read_item", Description: "Read one synthetic item by ID. Each returned record confirms that read is complete.", Parameters: map[string]interface{}{
+		"type": "object", "properties": map[string]interface{}{"id": map[string]interface{}{"type": "string", "enum": want}}, "required": []string{"id"},
+	},
+		Invoke: func(args map[string]interface{}) (interface{}, error) {
+			id, ok := args["id"].(string)
+			attempts = append(attempts, id)
+			if !ok || len(seen) >= len(want) || id != want[len(seen)] {
+				return "", fmt.Errorf("unexpected or repeated synthetic read: %v; completed=%v", args, seen)
+			}
+			seen = append(seen, id)
+			return "Completed read: " + id + "\n" + strings.Repeat("Routine sample; no additional action required.\n", 45) + "\nCompleted read: " + id, nil
+		},
+	}
+	agent.Config["tools"] = &ArrayValue{Elements: []Value{readTool}}
+	result, err := New(nil).ExecuteAgent(ctx, &ConversationValue{Messages: []ChatMessage{{Role: "user", Content: "Read item-01 through item-08 in order, exactly once each, using read_item. Call only one tool per response. Do not repeat completed reads, including reads in conversation memory. Once all eight reads are complete, respond only DONE."}}}, agent, false)
+	require.NoError(t, err)
+	conversation := result.(*ConversationValue)
+	require.Equal(t, want, seen)
+	require.Equal(t, want, attempts, "even rejected duplicate attempts are a failure")
+	require.GreaterOrEqual(t, conversation.CompactionCount, 1)
+	require.Equal(t, "DONE", strings.TrimSpace(conversation.Messages[len(conversation.Messages)-1].Content))
+	t.Logf("completed reads=%v compactions=%d", seen, conversation.CompactionCount)
 }
