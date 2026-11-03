@@ -60,7 +60,7 @@ print(conversation.compactionCount)
 | --- | --- | --- |
 | `maxTokens` | Model's `contextWindow` | Total estimated input and reserved output budget. Required if the model has no window. |
 | `reserveTokens` | 1024 | Space reserved for each normal agent response. Requests cap `maxTokens` to this value or the model's smaller existing limit. |
-| `summaryTokens` | 1024 | Output limit of each internal summarization request. |
+| `summaryTokens` | 1024 | Output limit of each internal summarization request, including reasoning tokens if the provider charges them against this limit. |
 | `keepRecentMessages` | 6 | Minimum number of newest history messages retained verbatim, extended backwards when necessary to keep a complete tool-call batch. |
 
 All settings are positive integers. Both output reservations must be smaller
@@ -69,6 +69,13 @@ the model window. `context: null` explicitly disables automatic compaction for
 that agent, even when its model declares a window. Dynamic SDK model references
 are resolved at execution time.
 
+Reasoning models may need a larger `summaryTokens` (for example, 4096) to leave
+room for the actual memory after internal reasoning. If the model stops with
+`finish_reason=length`, gsh reports the exhausted summary budget and keeps the
+original history. Increase this setting explicitly, keeping it below
+`maxTokens` and leaving enough input space for task context and prior memory.
+There is no automatic retry or silent increase in cost.
+
 ## What is preserved
 
 The first and latest user messages remain verbatim, as do the most recent
@@ -76,6 +83,9 @@ messages and the original system prompt. Assistant tool calls and their results
 are never split at the retained-history boundary. Older messages are summarized
 into separate conversation memory, which is sent as clearly labeled historical
 user data rather than elevated to a system instruction.
+The initial request precedes this memory, and recent messages follow it. This
+keeps later corrections in the memory from being overridden by stale values in
+the initial request.
 
 The summarizer is instructed to retain goals, constraints, observed results,
 decisions, relevant identifiers, completed actions, and unfinished work. A model
@@ -127,8 +137,11 @@ REPL middleware retains recoverable history automatically.
   than discarding those messages. Reduce retained content or increase the window
   only if the model supports it.
 - Summarization uses the same model and credentials, with tools disabled and
-  streaming disabled. Large transcripts are processed as bounded textual
-  fragments with rolling memory; no old history is silently truncated. Each
+  streaming disabled. The retained first/latest user messages provide task
+  context for choosing relevant information. Large transcripts are processed
+  as bounded fragments with rolling memory; each fragment retains its source
+  role, message index, tool-call ID, and byte offset, even inside a long tool
+  result. No old history is silently truncated. Each
   compaction allows at most 32 summary requests, then fails without replacing
   history. These requests have latency and token costs.
 - Automatic-compaction token usage is included in the agent's completion usage
@@ -142,4 +155,7 @@ REPL middleware retains recoverable history automatically.
   gsh instead.
 - This feature manages gsh's built-in agent conversations. ACP agents manage
   their own contexts. Persistence, cross-process resume, provider-specific
-  tokenizers, and semantic summary-quality evaluations are separate work.
+  tokenizers, and broad semantic quality benchmarks are separate work.
+
+See [real-model fidelity evaluation](../context-compaction-evaluation.md) for an
+opt-in, reproducible check of exact facts before and after repeated compaction.
