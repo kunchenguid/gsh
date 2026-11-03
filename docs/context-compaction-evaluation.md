@@ -108,6 +108,37 @@ earlier fact checks passing. This is a harness deadline, not a fact-retention
 failure. Individual fixtures can be selected with `-run` and run independently
 to reduce wall time, subject to the provider's concurrency limits.
 
+## Recorded results (2026-11-03–04, Asia/Shanghai)
+
+The implementation at `19e273b` was evaluated through an existing
+OpenAI-compatible gateway using the routes below. Each fixture was run twice;
+the slower route's fixtures were run independently. The harness made no
+thinking-mode override. Both routes explicitly used `summaryTokens=4096` for
+the golden-answer matrix; the other settings were the same as described above.
+
+| Model route | Fixtures × repeats | Exact JSON answers | Exact field comparisons |
+| --- | --- | --- | --- |
+| `deepseek-flash` | 4 × 2 | 40/40 passed | 200/200 passed |
+| `deepseek-v4-pro` | 4 × 2 | 40/40 passed | 200/200 passed |
+
+Each route's 40 answers include eight uncompressed controls and 32 answers
+after compaction. The final counts exclude interrupted preliminary runs and
+the earlier output-budget/deadline failures described above; all four final
+Pro fixture processes and the final Flash process exited successfully.
+Estimated serialized input decreased by 85.2–88.5% in these deliberately
+repetitive fixtures. This is not a measurement of production token/cost savings.
+
+The separate Flash tool-continuation test also passed twice: eight ordered
+synthetic reads and three automatic compactions in each run, no duplicate
+attempts, and `DONE` at completion (16 reads, six compactions total).
+
+Local validation used Go 1.25.14. Linux/WSL `make ci` passed, including native
+Node 22.23.3/npx filesystem MCP integration tests, code generation, formatting,
+and golangci-lint 2.15.0 with zero issues. Related tests passed under `-race`;
+Windows/Linux builds and a standalone `.gsh` configuration/manual-command
+smoke test passed. Remote GitHub Actions status is reported separately in the
+PR; local success does not imply upstream Actions have been approved or run.
+
 ## Limits
 
 Passing these fixtures is evidence for these scenarios, not a general summary
