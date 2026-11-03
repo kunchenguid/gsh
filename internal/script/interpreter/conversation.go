@@ -163,7 +163,9 @@ func (i *Interpreter) executeAgentWithString(message string, agent *AgentValue) 
 func (i *Interpreter) addMessageToConversation(conv *ConversationValue, message string) (Value, error) {
 	// Create a copy of the conversation to avoid mutation
 	newConv := &ConversationValue{
-		Messages: make([]ChatMessage, len(conv.Messages)),
+		Messages:        make([]ChatMessage, len(conv.Messages)),
+		Summary:         conv.Summary,
+		CompactionCount: conv.CompactionCount,
 	}
 	copy(newConv.Messages, conv.Messages)
 
@@ -196,7 +198,9 @@ func (i *Interpreter) executeAgentWithConversation(conv *ConversationValue, agen
 
 	// Create a temporary conversation with system prompt for execution
 	execConv := &ConversationValue{
-		Messages: messages,
+		Messages:        messages,
+		Summary:         conv.Summary,
+		CompactionCount: conv.CompactionCount,
 	}
 
 	// Determine streaming mode:
@@ -216,5 +220,20 @@ func (i *Interpreter) executeAgentWithConversation(conv *ConversationValue, agen
 	}
 
 	// Use interpreter's context for cancellation support (e.g., Ctrl+C)
-	return i.ExecuteAgent(i.Context(), execConv, agent, streaming)
+	result, err := i.ExecuteAgent(i.Context(), execConv, agent, streaming)
+	if err != nil {
+		// A configured context failure can occur after tools have already run.
+		// Let scripts recover that history without rerunning those operations.
+		if partial, ok := result.(*ConversationValue); ok {
+			if resolver, ok := agent.Config["model"].(ModelResolver); ok && resolver.GetModel() != nil {
+				if policy, policyErr := readContextPolicy(agent, resolver.GetModel()); policyErr == nil && policy != nil {
+					return nil, &ThrownError{Value: &ObjectValue{Properties: map[string]*PropertyDescriptor{
+						"message":      {Value: &StringValue{Value: err.Error()}},
+						"conversation": {Value: partial},
+					}}}
+				}
+			}
+		}
+	}
+	return result, err
 }

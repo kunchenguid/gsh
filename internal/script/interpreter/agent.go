@@ -57,6 +57,14 @@ func (i *Interpreter) evalAgentDeclaration(env *Environment, node *parser.AgentD
 	}
 
 	// Register the agent in the environment
+	resolver := config["model"].(ModelResolver)
+	if model := resolver.GetModel(); model != nil {
+		if _, err := readContextPolicy(agent, model); err != nil {
+			return nil, err
+		}
+	} else if _, err := readContextPolicy(agent, &ModelValue{}); err != nil {
+		return nil, err
+	}
 	env.Set(agentName, agent)
 
 	return agent, nil

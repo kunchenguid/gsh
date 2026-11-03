@@ -87,6 +87,15 @@ gsh> # what's in my current directory and what should I do next?
 
 ## Agent Basics
 
+### Long conversations
+
+Set `contextWindow` on your workhorse model to enable automatic context budgeting
+and summarization. Use `# /compact` to compact the current conversation manually.
+The first and latest user messages and recent tool interactions are retained;
+failed compactions preserve the conversation. This is opt-in and uses additional
+model calls. See [Context management](../script/24-context-management.md) for
+configuration, estimation limits, and error recovery.
+
 ### Starting an Agent Conversation
 
 Use `#` followed by your request:

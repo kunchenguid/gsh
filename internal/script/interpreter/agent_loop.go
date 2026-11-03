@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -118,43 +119,15 @@ func (i *Interpreter) executeAgentInternal(ctx context.Context, conv *Conversati
 		}
 	}
 
-	// Prepare tools for the agent
-	// First, add tools from callbacks (e.g., REPL built-in tools)
-	tools := []ChatTool{}
-	if callbacks != nil && len(callbacks.Tools) > 0 {
-		tools = append(tools, callbacks.Tools...)
+	policy, err := readContextPolicy(agent, model)
+	if err != nil {
+		callOnComplete(acp.StopReasonError, err)
+		return nil, err
 	}
-
-	// Then add tools from agent config
-	if toolsVal, ok := agent.Config["tools"]; ok {
-		if toolsArr, ok := toolsVal.(*ArrayValue); ok {
-			for _, toolValInterface := range toolsArr.Elements {
-				// Handle different tool types
-				switch toolVal := toolValInterface.(type) {
-				case *ToolValue:
-					// User-defined tool
-					tool := i.convertUserToolToChatTool(toolVal)
-					tools = append(tools, tool)
-				case *MCPToolValue:
-					// MCP tool
-					tool, err := i.convertMCPToolToChatTool(toolVal)
-					if err != nil {
-						err = fmt.Errorf("failed to convert MCP tool: %w", err)
-						callOnComplete(acp.StopReasonError, err)
-						return nil, err
-					}
-					tools = append(tools, tool)
-				case *NativeToolValue:
-					// Native tool (gsh.tools.*)
-					tool := i.convertNativeToolToChatTool(toolVal)
-					tools = append(tools, tool)
-				default:
-					err := fmt.Errorf("invalid tool type in agent config: %s", toolVal.Type())
-					callOnComplete(acp.StopReasonError, err)
-					return nil, err
-				}
-			}
-		}
+	tools, err := i.agentChatTools(agent, callbacks)
+	if err != nil {
+		callOnComplete(acp.StopReasonError, err)
+		return nil, err
 	}
 
 	// Create new conversation with response (excluding system messages)
@@ -167,28 +140,11 @@ func (i *Interpreter) executeAgentInternal(ctx context.Context, conv *Conversati
 	}
 
 	newConv := &ConversationValue{
-		Messages: make([]ChatMessage, len(userMessages)),
+		Messages:        make([]ChatMessage, len(userMessages)),
+		Summary:         conv.Summary,
+		CompactionCount: conv.CompactionCount,
 	}
 	copy(newConv.Messages, userMessages)
-
-	// Build messages for the request (include system prompt for the model)
-	buildRequestMessages := func() []ChatMessage {
-		messages := []ChatMessage{}
-
-		// Add system prompt if configured
-		if systemPromptVal, ok := agent.Config["systemPrompt"]; ok {
-			if systemPromptStr, ok := systemPromptVal.(*StringValue); ok {
-				messages = append(messages, ChatMessage{
-					Role:    "system",
-					Content: systemPromptStr.Value,
-				})
-			}
-		}
-
-		// Add all messages from the conversation
-		messages = append(messages, newConv.Messages...)
-		return messages
-	}
 
 	// Determine if we should use streaming
 	useStreaming := streaming
@@ -210,10 +166,28 @@ func (i *Interpreter) executeAgentInternal(ctx context.Context, conv *Conversati
 			callbacks.OnIterationStart(iteration)
 		}
 
+		compacted, usage, compactErr := compactContext(ctx, newConv, agent, model, tools, policy, false)
+		totalInputTokens += usage.PromptTokens
+		totalOutputTokens += usage.CompletionTokens
+		totalCachedTokens += usage.CachedTokens
+		if compactErr != nil {
+			reason := acp.StopReasonError
+			if errors.Is(compactErr, context.Canceled) {
+				reason = acp.StopReasonCancelled
+			}
+			callOnComplete(reason, compactErr)
+			return newConv, compactErr
+		}
+		newConv = compacted
+		requestModel := model
+		if policy != nil {
+			requestModel = modelWithOutputLimit(model, policy.reserveTokens, true)
+		}
+
 		// Create chat request
 		request := ChatRequest{
-			Model:    model,
-			Messages: buildRequestMessages(),
+			Model:    requestModel,
+			Messages: contextMessages(agent, newConv),
 			Tools:    tools,
 		}
 
@@ -245,10 +219,10 @@ func (i *Interpreter) executeAgentInternal(ctx context.Context, conv *Conversati
 					callbacks.OnToolPending(toolCallID, toolName)
 				}
 			}
-			response, err = model.Provider.StreamingChatCompletion(ctx, request, streamCallbacks)
+			response, err = requestModel.StreamingChatCompletion(ctx, request, streamCallbacks)
 		} else {
 			// Non-streaming call
-			response, err = model.ChatCompletion(ctx, request)
+			response, err = requestModel.ChatCompletion(ctx, request)
 		}
 
 		if err != nil {
@@ -259,6 +233,9 @@ func (i *Interpreter) executeAgentInternal(ctx context.Context, conv *Conversati
 				err = fmt.Errorf("agent execution failed: %w", err)
 			}
 			callOnComplete(acp.StopReasonError, err)
+			if policy != nil {
+				return newConv, err
+			}
 			return nil, err
 		}
 
@@ -393,7 +370,7 @@ func (i *Interpreter) executeAgentInternal(ctx context.Context, conv *Conversati
 	}
 
 	// If we reach here, we hit max iterations - return what we have
-	err := fmt.Errorf("agent reached maximum iterations (%d) without completing", maxIterations)
+	err = fmt.Errorf("agent reached maximum iterations (%d) without completing", maxIterations)
 	callOnComplete(acp.StopReasonMaxIterations, err)
 	return newConv, err
 }

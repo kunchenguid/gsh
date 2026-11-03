@@ -568,6 +568,9 @@ func (a *AgentValue) GetProperty(name string) Value {
 type ConversationValue struct {
 	// Messages in the conversation history
 	Messages []ChatMessage
+	// Summary contains compacted historical data, not system instructions.
+	Summary         string
+	CompactionCount int
 }
 
 func (c *ConversationValue) Type() ValueType { return ValueTypeConversation }
@@ -585,6 +588,10 @@ func (c *ConversationValue) Equals(other Value) bool {
 // GetProperty returns a property of the conversation
 func (c *ConversationValue) GetProperty(name string) Value {
 	switch name {
+	case "summary":
+		return &StringValue{Value: c.Summary}
+	case "compactionCount":
+		return &NumberValue{Value: float64(c.CompactionCount)}
 	case "messages":
 		// Convert []ChatMessage to ArrayValue of ObjectValues
 		elements := make([]Value, len(c.Messages))

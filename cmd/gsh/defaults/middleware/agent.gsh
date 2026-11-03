@@ -36,6 +36,20 @@ tool __defaultAgentMiddleware(ctx, next) {
             print("Conversation cleared")
             return { handled: true }
         }
+
+        if (message == "/compact") {
+            if (__conversation == null) {
+                print("No active conversation to compact")
+            } else {
+                try {
+                    __conversation = gsh.compact(__conversation, __defaultAgent)
+                    print("Conversation compacted (total: " + __conversation.compactionCount + ")")
+                } catch (e) {
+                    print("gsh: " + e.message)
+                }
+            }
+            return { handled: true }
+        }
         
         # Check if directory has changed since last agent interaction
         currentDir = gsh.currentDirectory
@@ -46,10 +60,17 @@ tool __defaultAgentMiddleware(ctx, next) {
         __lastKnownDirectory = currentDir
         
         # Chat with the default agent using pipe expressions
-        if (__conversation == null) {
-            __conversation = message | __defaultAgent
-        } else {
-            __conversation = __conversation | message | __defaultAgent
+        try {
+            if (__conversation == null) {
+                __conversation = message | __defaultAgent
+            } else {
+                __conversation = __conversation | message | __defaultAgent
+            }
+        } catch (e) {
+            if (e.conversation != null) {
+                __conversation = e.conversation
+            }
+            print("gsh: " + e.message)
         }
         return { handled: true }
     }

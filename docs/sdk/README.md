@@ -13,6 +13,7 @@ The `gsh` object is the primary API for configuring and extending gsh, available
 | `gsh.completion`             | Tab-completion menu configuration            | REPL + Script |
 | `gsh.models`                 | Model tier system (lite, workhorse, premium) | REPL + Script |
 | `gsh.tools`                  | Built-in tools for agents                    | REPL + Script |
+| `gsh.compact(conversation, agent)` | [Compact older conversation history](../script/24-context-management.md) | REPL + Script |
 | `gsh.prompt`                 | Set the shell prompt                         | REPL only     |
 | `gsh.lastCommand`            | Exit code and duration of last command       | REPL only     |
 | `gsh.use()` / `gsh.remove()` / `gsh.removeAll()` | Event/middleware handler registration        | REPL + Script |
